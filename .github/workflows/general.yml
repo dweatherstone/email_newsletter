@@ -6,6 +6,8 @@ on: [push, pull_request]
 
 env:
     CARGO_TERM_COLOR: always
+    SQLX_VERSION: 0.7.4
+    SQLX_FEATURES: "postgres"
 
 # A workflow run is made up of one or more jobs, which run in parallel by default
 # Each job runs in a runner environment specified by runs-on
@@ -16,6 +18,15 @@ jobs:
         name: Test
         # Containers must run in Linux based operating systems
         runs-on: ubuntu-latest
+        services:
+            postgres:
+                image: postgres:14
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: password
+                    POSTGRES_DB: postgres
+                ports:
+                  - 5432:5432
         steps:
             # Downloads a copy of the code in your repository before running CI tests
           - name: Check out repository code
@@ -31,6 +42,19 @@ jobs:
             # A GitHub Action that implements smart caching for rust/cargo projects with sensible defaults
           - name: Rust Cache Action
             uses: Swatinem/rust-cache@v2
+            with:
+                key: sqlx-${{ env.SQLX_VERSION }}
+          - name: Install sqlx-cli
+            run:
+                cargo install sqlx-cli
+                --version=${{ env.SQLX_VERSION }}
+                --features ${{ env.SQLX_FEATURES }}
+                --no-default-features
+                --locked
+          - name: Migrate database
+            run: |
+                sudo apt-get install libpq-dev -y
+                SKIP_DOCKER=true ./scripts/init_db.sh
             
           - name: Run tests
             run: cargo test
@@ -51,12 +75,34 @@ jobs:
     clippy:
         name: Clippy
         runs-on: ubuntu-latest
+        services:
+            postgres:
+                image: postgres:14
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: password
+                    POSTGRES_DB: postgres
+                ports:
+                  - 5432:5432
         steps:
           - uses: actions/checkout@v3
           - uses: dtolnay/rust-toolchain@stable
             with:
                 components: clippy
           - uses: Swatinem/rust-cache@v2
+            with:
+                key: sqlx-${{ env.SQLX_VERSION }}
+          - name: Install sqlx-cli
+            run:
+              cargo install sqlx-cli
+                --version=${{ env.SQLX_VERSION }}
+                --features ${{ env.SQLX_FEATURES }}
+                --no-default-features
+                --locked
+          - name: Migrate database
+            run: |
+              sudo apt-get install libpq-dev -y
+              SKIP_DOCKER=true ./scripts/init_db.sh
           - name: Linting
             run: cargo clippy -- -D warnings
 
@@ -64,12 +110,34 @@ jobs:
     coverage:
         name: Code coverage
         runs-on: ubuntu-latest
-        container:
-            image: xd009642/tarpaulin
-            options: --security-opt seccomp=unconfined
+        services:
+            postgres:
+                image: postgres:14
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: password
+                    POSTGRES_DB: postgres
+                ports:
+                  - 5432:5432
         steps:
           - name: Checkout repository
             uses: actions/checkout@v3
+          - uses: dtolnay/rust-toolchain@stable
+          - name: Install libpq
+            run: sudo apt-get update && sudo apt-get install postgresql-client -y
+          - uses: Swatinem/rust-cache@v2
+            with:
+                key: sqlx-${{ env.SQLX_VERSION }}
+          - name: Install tarpaulin
+            run: cargo install cargo-tarpaulin
+          - name: Install sqlx-cli
+            run:
+                cargo install sqlx-cli
+                --version=${{ env.SQLX_VERSION }}
+                --features ${{ env.SQLX_FEATURES }}
+                --no-default-features
+                --locked
+          - name: Migrate database
+            run: SKIP_DOCKER=true ./scripts/init_db.sh
           - name: Generate code coverage
-            run: |
-                cargo tarpaulin --verbose --workspace
+            run: cargo tarpaulin --verbose --workspace

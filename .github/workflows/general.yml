@@ -58,8 +58,8 @@ jobs:
           - name: Check sqlx-data.json is up-to-date
             run: |
               cargo sqlx prepare --workspace --check
-              - name: Run tests
-                run: cargo test
+          - name: Run tests
+            run: cargo test
 
     # `fmt` container job
     fmt:
